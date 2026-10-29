@@ -21,10 +21,18 @@ const trait=(h,k)=>h.traits[k]||0;
 const sum=(team,k)=>team.reduce((v,n)=>v+trait(H.get(n),k),0);
 const esc=(v)=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const heroSlug=s=>s.toLowerCase().replace(/[.'’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-const heroUrls=name=>[
- `https://raw.githubusercontent.com/Ceplin03/database-mlbb.Mobile-Legends-Bang-Bang/master/images-hero/${heroSlug(name).replaceAll('-','_')}.png`,
- `https://mlbbhub.com/images/heroes/${heroSlug(name)}.png`
-];
+const heroUrls=name=>{
+ const special={
+  "Chang'e":"chang27e",
+  "Lapu-Lapu":"lapu-lapu",
+  "Yi Sun-shin":"yi_sun-shin"
+ };
+ const filename=special[name]||heroSlug(name).replaceAll('-','_');
+ return [
+  `https://raw.githubusercontent.com/Ceplin03/database-mlbb.Mobile-Legends-Bang-Bang/master/images-hero/${filename}.png`,
+  `https://mlbbhub.com/images/heroes/${heroSlug(name)}.png`
+ ];
+};
 function face(urls,name,small=false){
  const first=iconsReady.get(name)||urls[0];
  const others=[first,...urls.filter(u=>u!==first)];
@@ -46,6 +54,9 @@ function renderTeam(t){
  byId(t+'Slots').querySelectorAll('button[data-remove]').forEach(b=>b.onclick=()=>{
   selected[t].splice(Number(b.dataset.remove),1); renderTeam('enemy');renderTeam('ally');
  });
+ const isFull=names.length>=limit;
+ byId(t+'Search').style.display=isFull?'none':'';
+ byId(t+'Matches').style.display=isFull?'none':'';
  const q=byId(t+'Search').value.trim().toLowerCase();
  const allow=DATA.heroes.filter(h=>h.name!=='Gord'&&!selected.enemy.includes(h.name)&&!selected.ally.includes(h.name));
  const matches=q?allow.filter(h=>h.name.toLowerCase().includes(q)).sort((a,b)=>metaRank(a)-metaRank(b)||a.name.localeCompare(b.name)).slice(0,12):[];
