@@ -4,8 +4,8 @@
 </style></head><body>
 <div id="boot" role="status"><div class="boot-card"><img src="https://static.wikia.nocookie.net/mobile-legends/images/2/27/Hero231-icon.png" alt="Gord"><strong>Gord Lab V11</strong><p id="bootMsg">Memuat gambar sebelum masuk...</p><div class="track"><div class="bar" id="progress"></div></div><span class="tiny" id="bootCount">0/150 gambar dicek</span><button id="skip" class="skip">Masuk tanpa semua gambar</button></div></div>
 <main><header class="head"><img src="https://static.wikia.nocookie.net/mobile-legends/images/2/27/Hero231-icon.png" onerror="this.style.display='none'" alt="Gord"><div><div class="brand">Gord Lab <span style="color:var(--blue)">V11</span></div><div class="sub">133 profil hero · 16 item · draft offline</div></div><span class="ver">2.2.16a</span></header>
-<section class="panel"><div class="top">⚔️ Musuh <span id="enemyCount">0/5</span></div><div class="slots" id="enemySlots"></div><input id="enemySearch" class="search" placeholder="Cari hero musuh…" autocomplete="off"><div class="matches" id="enemyMatches"></div></section>
-<section class="panel"><div class="top">🛡️ Teman <span id="allyCount">0/4</span></div><div class="slots four" id="allySlots"></div><input id="allySearch" class="search" placeholder="Cari hero teman…" autocomplete="off"><div class="matches" id="allyMatches"></div></section>
+<section class="panel"><div class="top">⚔️ Musuh <span id="enemyCount">0/5</span></div><div class="slots" id="enemySlots"></div><input id="enemySearch" class="search" style="font-size:16px" placeholder="Cari hero musuh…" autocomplete="off"><div class="matches" id="enemyMatches"></div></section>
+<section class="panel"><div class="top">🛡️ Teman <span id="allyCount">0/4</span></div><div class="slots four" id="allySlots"></div><input id="allySearch" class="search" style="font-size:16px" placeholder="Cari hero teman…" autocomplete="off"><div class="matches" id="allyMatches"></div></section>
 <button id="run" class="go">⚡ Buat Build Gord</button>
 <section class="panel" id="result"><div class="empty">Pilih hero lalu buat build otomatis.</div></section>
 
@@ -183,9 +183,15 @@ byId('run').onclick=build;
  const progress=byId('progress'),msg=byId('bootMsg'),skip=byId('skip');
  let entered=false;
  const enter=()=>{if(entered)return;entered=true;document.body.classList.add('ready');};
- skip.onclick=enter;
- const valid=DATA.heroes.length===133&&Object.keys(I).length===16&&DATA.heroes.every(h=>h.kit&&h.role&&h.cc&&h.traits);
- if(!valid){msg.textContent='Data hero tidak lengkap';skip.style.display='block';return;}
+
+  skip.onclick=enter;
+  const valid=DATA.heroes.length===133&&Object.keys(I).length===16&&DATA.heroes.every(h=>h.kit&&h.role&&h.cc&&h.traits);
+  if(!valid){msg.textContent='Data hero tidak lengkap';skip.style.display='block';return;}
+  if(navigator.onLine===false){
+   enter();
+   return;
+  }
+
  const gord='https://static.wikia.nocookie.net/mobile-legends/images/2/27/Hero231-icon.png';
  const tasks=[['Gord',[gord]],...Object.values(I).map(v=>[v.name,v.imgs]),...DATA.heroes.map(h=>[h.name,heroUrls(h.name)])];
  // Hold successfully decoded Image objects in memory while the tab is open.
