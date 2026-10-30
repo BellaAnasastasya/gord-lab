@@ -70,6 +70,7 @@ function renderTeam(t){
 // Whole-draft signal strengths. Ratings are draft heuristics (0-3 per hero), NOT live match equipment or exact skill numbers.
 function analyze(options={}){
  const deferWinter=!!options.deferWinter;
+ const standardOrder=deferWinter?analyze().order:null;
  const en=selected.enemy,al=selected.ally;
  const enemyHeal=sum(en,'H'),enemySustain=sum(en,'S'),enemyVamp=sum(en,'L'),enemyShield=sum(en,'Q');
  const enemyTank=sum(en,'T'),enemyFront=sum(en,'F'),enemyDive=sum(en,'D'),enemyMob=sum(en,'M'),enemyBurst=sum(en,'B'),enemyCC=sum(en,'C'),enemyMagic=sum(en,'G'),enemyPoke=sum(en,'P'),enemyZone=sum(en,'Z');
@@ -127,18 +128,22 @@ function analyze(options={}){
  }
  while(chosen.length<4){const next=ranking.find(id=>!chosen.includes(id));chosen.push(next)}
  // Refresh preserves Winter Crown when it was recommended, while moving it later.
- if(deferWinter && !chosen.includes('winter') && analyze().order.includes('winter')){
+ if(deferWinter && !chosen.includes('winter') && standardOrder.includes('winter')){
   let replace=chosen.findLastIndex((id,i)=>i>0&&!['glow','lantern','crystal','genius','lightning'].includes(id));
   if(replace<0)replace=chosen.length-1;
   chosen[replace]='winter';
  }
  const remaining=chosen.filter(id=>id!==second).sort((a,b)=>{
-  if(deferWinter && a==='winter' && b!=='winter')return 1;
-  if(deferWinter && b==='winter' && a!=='winter')return -1;
+  if(deferWinter && a==='winter' && b!=='winter')return -1;
+  if(deferWinter && b==='winter' && a!=='winter')return 1;
   const late=id=>id==='crystal'?2:id==='divine'?3:1;
   return late(a)-late(b)||S[b]-S[a];
  });
  const order=[boots,second,'talisman',...remaining];
+ // Refresh only moves an early Winter Crown to slot 4. Otherwise keep the original recommendation.
+ if(deferWinter && standardOrder.indexOf('winter')!==1){
+  order.splice(0,order.length,...standardOrder);
+ }
  const cdItem=order.reduce((n,id)=>n+I[id].cd,0);
  const cd=Math.min(45,cdItem+10); // Mage emblem 5% + Inspire 5%; Talisman raises cap to 45%.
  const diagnostics={
@@ -185,7 +190,7 @@ function build(shouldScroll=true){
  const explain=a.order.map((id,index)=>`<div class="why"><b>${index+1}. ${esc(I[id].name)}</b><span>${esc(noteFor(id,a))}</span></div>`).join('');
  const enemyProfiles=selected.enemy.map(n=>profileChip(n)).join('');
  const allyProfiles=selected.ally.map(n=>profileChip(n)).join('');
- byId('result').innerHTML=`<div class="row-title"><b>Build buat Gord</b><span style="display:flex;gap:8px;align-items:center"><button id="refresh" class="linkbtn" type="button">⟳ Refresh urutan</button><button id="copy" class="linkbtn" type="button">Salin ↗</button></span></div><div class="chips"><span class="pill">${a.cd}% CDR</span>${tags(a).map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</div><div class="itemgrid">${a.order.map((id,ix)=>`<div class="item ${id==='talisman'?'must':''}"><span class="num">${ix+1}</span>${images(id)}<b>${esc(I[id].name)}</b><small>${esc(I[id].desc)}</small></div>`).join('')}</div><div class="micro"><b>Emblem:</b> Mage · Inspire / Bargain Hunter / Impure Rage &nbsp; <b>Spell:</b> ${a.spell}</div><details><summary>Kenapa pilih item ini?</summary>${explain}</details><details><summary>Analisis hero (${selected.enemy.length} musuh + ${selected.ally.length} teman)</summary><div class="tiny-head">Musuh</div>${enemyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tiny-head">Teman</div>${allyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tip">Stat CC/heal/mobilitas adalah bobot prediksi draft, bukan data item asli musuh.</div></details><div class="tip">${refreshCounter?'Mode counter lebih awal: Winter Crown diundur jika tidak harus dipakai segera.':'Mode standar: prioritas counter sesuai skor ancaman draft.'} Tekan Refresh urutan untuk membandingkan. Talisman tetap slot 3. Prediksi berdasarkan draft, bukan kejadian langsung dalam match.</div>`;
+ byId('result').innerHTML=`<div class="row-title"><b>Build buat Gord</b><span style="display:flex;gap:8px;align-items:center"><button id="refresh" class="linkbtn" type="button">⟳ Refresh urutan</button><button id="copy" class="linkbtn" type="button">Salin ↗</button></span></div><div class="chips"><span class="pill">${a.cd}% CDR</span>${tags(a).map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</div><div class="itemgrid">${a.order.map((id,ix)=>`<div class="item ${id==='talisman'?'must':''}"><span class="num">${ix+1}</span>${images(id)}<b>${esc(I[id].name)}</b><small>${esc(I[id].desc)}</small></div>`).join('')}</div><div class="micro"><b>Emblem:</b> Mage · Inspire / Bargain Hunter / Impure Rage &nbsp; <b>Spell:</b> ${a.spell}</div><details><summary>Kenapa pilih item ini?</summary>${explain}</details><details><summary>Analisis hero (${selected.enemy.length} musuh + ${selected.ally.length} teman)</summary><div class="tiny-head">Musuh</div>${enemyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tiny-head">Teman</div>${allyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tip">Stat CC/heal/mobilitas adalah bobot prediksi draft, bukan data item asli musuh.</div></details><div class="tip">${refreshCounter?'Mode counter lebih awal: Winter Crown slot 2 dipindah ke slot 4; jika sudah lebih belakang, urutan tetap.':'Mode standar: prioritas counter sesuai skor ancaman draft.'} Tekan Refresh urutan untuk membandingkan. Talisman tetap slot 3. Prediksi berdasarkan draft, bukan kejadian langsung dalam match.</div>`;
  latest=`Gord vs ${selected.enemy.join(', ')||'(belum dipilih)'}\nTim ${selected.ally.join(', ')||'(belum dipilih)'}\n${a.order.map((id,i)=>`${i+1}. ${I[id].name}`).join('\n')}\nCDR ${a.cd}% (emblem) · ${a.spell}`;
  byId('copy').onclick=async()=>{
   try{await navigator.clipboard.writeText(latest);byId('copy').textContent='Disalin ✓'}catch(e){const t=document.createElement('textarea');t.value=latest;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();byId('copy').textContent='Disalin ✓'}
