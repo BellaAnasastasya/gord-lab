@@ -184,36 +184,40 @@ function tags(a){const s=a.signals,t=[];
 }
 let latest='';
 let refreshCounter=false;
-let winterRemoved=false;
+let winterSelected=false;
 function build(shouldScroll=true){
  const a=analyze({deferWinter:refreshCounter});
- if(winterRemoved && a.order.includes('winter')){
-  const index=a.order.indexOf('winter');
-  const replacement=Object.keys(a.scores)
-   .filter(id=>id!=='winter' && id!=='sky' && !a.order.includes(id))
-   .sort((x,y)=>a.scores[y]-a.scores[x])[0];
-  if(replacement){
-   a.order[index]=replacement;
-   const cdItem=a.order.reduce((total,id)=>total+I[id].cd,0);
-   a.rawCD=cdItem+10;
-   a.cd=Math.min(45,a.rawCD);
-  }
+ const winterIndex=a.order.indexOf('winter');
+ const winterAlternative=winterIndex<0?null:Object.keys(a.scores)
+  .filter(id=>id!=='winter' && id!=='sky' && !a.order.includes(id))
+  .sort((x,y)=>a.scores[y]-a.scores[x])[0]||null;
+ if(winterAlternative && !winterSelected){
+  a.order[winterIndex]=winterAlternative;
+  const cdItem=a.order.reduce((total,id)=>total+I[id].cd,0);
+  a.rawCD=cdItem+10;
+  a.cd=Math.min(45,a.rawCD);
  }
  const images=id=>face(I[id].imgs,I[id].name);
  const explain=a.order.map((id,index)=>`<div class="why"><b>${index+1}. ${esc(I[id].name)}</b><span>${esc(noteFor(id,a))}</span></div>`).join('');
  const enemyProfiles=selected.enemy.map(n=>profileChip(n)).join('');
  const allyProfiles=selected.ally.map(n=>profileChip(n)).join('');
  byId('result').innerHTML=`<div class="row-title"><b>Build buat Gord</b><span style="display:flex;gap:8px;align-items:center"><button id="refresh" class="linkbtn" type="button">⟳ Refresh urutan</button><button id="copy" class="linkbtn" type="button">Salin ↗</button></span></div><div class="chips"><span class="pill">${a.cd}% CDR</span>${tags(a).map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</div><div class="itemgrid">${a.order.map((id,ix)=>`<div class="item ${id==='talisman'?'must':''}"><span class="num">${ix+1}</span>${images(id)}<b>${esc(I[id].name)}</b><small>${esc(I[id].desc)}</small></div>`).join('')}</div><div class="micro"><b>Emblem:</b> Mage · Inspire / Bargain Hunter / Impure Rage &nbsp; <b>Spell:</b> ${a.spell}</div><details><summary>Kenapa pilih item ini?</summary>${explain}</details><details><summary>Analisis hero (${selected.enemy.length} musuh + ${selected.ally.length} teman)</summary><div class="tiny-head">Musuh</div>${enemyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tiny-head">Teman</div>${allyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tip">Stat CC/heal/mobilitas adalah bobot prediksi draft, bukan data item asli musuh.</div></details><div class="tip">${refreshCounter?'Mode counter lebih awal: Winter Crown slot 2 dipindah ke slot 4; jika sudah lebih belakang, urutan tetap.':'Mode standar: prioritas counter sesuai skor ancaman draft.'} Tekan Refresh urutan untuk membandingkan. Talisman tetap slot 3. Prediksi berdasarkan draft, bukan kejadian langsung dalam match.</div>`;
- const winterCard=[...byId('result').querySelectorAll('.item')].find(card=>card.querySelector('b')?.textContent==='Winter Crown');
- if(winterCard){
-  winterCard.style.cursor='pointer';
-  winterCard.setAttribute('role','button');
-  winterCard.setAttribute('tabindex','0');
-  winterCard.setAttribute('title','Hapus Winter Crown dan pilih satu item pengganti');
-  winterCard.setAttribute('aria-label','Hapus Winter Crown dan hitung item pengganti');
-  const removeWinter=()=>{winterRemoved=true;build(false);};
-  winterCard.onclick=removeWinter;
-  winterCard.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();removeWinter();}};
+ if(winterAlternative){
+  const toggleCard=byId('result').querySelectorAll('.item')[winterIndex];
+  const shownName=winterSelected?'Winter Crown':I[winterAlternative].name;
+  const nextName=winterSelected?I[winterAlternative].name:'Winter Crown';
+  const dot=document.createElement('span');
+  dot.setAttribute('aria-hidden','true');
+  dot.style.cssText='position:absolute;top:5px;right:5px;width:12px;height:12px;border-radius:50%;background:#42a5ff;border:2px solid #d7edff;box-shadow:0 0 0 1px #174987;pointer-events:none;';
+  toggleCard.appendChild(dot);
+  toggleCard.style.cursor='pointer';
+  toggleCard.setAttribute('role','button');
+  toggleCard.setAttribute('tabindex','0');
+  toggleCard.setAttribute('title',`Ganti ${shownName} ke ${nextName}`);
+  toggleCard.setAttribute('aria-label',`Ganti ${shownName} ke ${nextName}`);
+  const toggleWinter=()=>{winterSelected=!winterSelected;build(false);};
+  toggleCard.onclick=toggleWinter;
+  toggleCard.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleWinter();}};
  }
  latest=`Gord vs ${selected.enemy.join(', ')||'(belum dipilih)'}\nTim ${selected.ally.join(', ')||'(belum dipilih)'}\n${a.order.map((id,i)=>`${i+1}. ${I[id].name}`).join('\n')}\nCDR ${a.cd}% (emblem) · ${a.spell}`;
  byId('copy').onclick=async()=>{
@@ -228,7 +232,7 @@ function profileChip(name){
  const cc=h.cc.length?h.cc.join(', '):'tidak dominan';
  return `<div class="heroline"><b>${esc(h.name)} <small>${esc(h.tier)}${h.proMeta?' · Pro':''}</small></b><span>${esc(h.kit)}</span><small>CC: ${esc(cc)} · ${esc(h.role)}</small></div>`;
 }
-byId('run').onclick=()=>{refreshCounter=false;winterRemoved=false;build();};
+byId('run').onclick=()=>{refreshCounter=false;winterSelected=false;build();};
 // Data is inline: loading covers data checks + image preflight. We never depend on internet for draft scoring.
 (async function boot(){
  const progress=byId('progress'),msg=byId('bootMsg'),skip=byId('skip');
