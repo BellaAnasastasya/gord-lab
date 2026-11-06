@@ -77,26 +77,30 @@ function analyze(options={}){
  const allyCC=sum(al,'C'),allyPeel=sum(al,'R'),allyShield=sum(al,'Q'),allyFront=sum(al,'F'),allyHeal=sum(al,'H');
  const controlPressure=en.filter(n=>H.get(n).cc.some(c=>['suppress','freeze','polymorph','stun','knockup','pull','immobilize','taunt'].includes(c))).length;
  const enemyHardSup=en.filter(n=>H.get(n).cc.includes('suppress')).length;
- const healNeed=enemyHeal*1.5 + enemySustain*.67 + enemyVamp*.32 + enemyShield*.48;
+ const healNeed=enemyHeal*1.65 + enemySustain*.62 + enemyVamp*.42;
+ const shieldNeed=enemyShield*.75;
  const tankNeed=enemyTank*.95 + enemyFront*.35;
+ const penetrationNeed=enemyTank*.78+enemyFront*.28;
  const protection=allyPeel*.7+allyFront*.4+allyShield*.27+allyHeal*.22;
  const diveNeed=Math.max(0, enemyDive*.82+enemyBurst*.38+enemyMob*.27-protection*.34);
  const slowNeed=Math.max(0, enemyMob*.82+enemyDive*.25+enemyZone*.15-allyCC*.43-allyPeel*.30);
  const ccNeed=enemyCC*.5+controlPressure*.7;
  const magicNeed=enemyMagic*.65;
  const pokeNeed=enemyPoke*.7;
- const hardHeal=healNeed>=3.15;
+ const hardHeal=healNeed+shieldNeed*.65>=3.15;
  const hardDive=diveNeed>=5.2;
  const hardTank=tankNeed>=4.1;
+ const hardPen=penetrationNeed>=4.6;
  const hardSlow=slowNeed>=4.0;
+
  const boots=(magicNeed>=3.2&&ccNeed>=3.2&&enemyHardSup===0)?'tough':((enemyTank<3&&enemyFront<4&&enemyDive<4&&enemyMob<5)?'arcane':'shoes');
  const S={
-  glow:18+healNeed*13,
+  glow:18+healNeed*12+shieldNeed*7,
   lantern:25+tankNeed*10,
   ice:21+slowNeed*10,
   winter:7+diveNeed*10,
   wings:8+diveNeed*4+pokeNeed*3,
-  divine:19+tankNeed*4,
+  divine:19+penetrationNeed*8+(hardPen?12:0),
   crystal:50+(allyCC>=5?5:0),
   genius:25+(tankNeed<3?11:0),
   lightning:32+(enemyFront<4?5:0),
@@ -104,6 +108,7 @@ function analyze(options={}){
   fleeting:7+(allyCC>=7?6:0),
   sky:-20
  };
+
  // Slot 2 must be an immediate counter, never pure scaling or reset.
  const early={
   glow:S.glow+(hardHeal?48:0),
@@ -118,7 +123,10 @@ function analyze(options={}){
  let second=Object.keys(early).sort((a,b)=>early[b]-early[a])[0];
  // Strongly contested healing / hard dive can both be included; remaining picks maximize damage and utility.
  const chosen=[second];
- for(const [enabled,id] of [[hardHeal,'glow'],[hardDive,'winter'],[hardTank,'lantern']])if(enabled&&!chosen.includes(id)&&chosen.length<3)chosen.push(id);
+ const priorities=[[hardHeal,'glow'],[hardDive,'winter'],[hardTank,'lantern'],[hardPen,'divine']]
+  .filter(([enabled])=>enabled).sort((a,b)=>S[b[1]]-S[a[1]]);
+ for(const [,id] of priorities)if(!chosen.includes(id)&&chosen.length<3)chosen.push(id);
+
  let ranking=Object.keys(S).filter(id=>!chosen.includes(id)).sort((a,b)=>S[b]-S[a]);
  // Preserve at least one reliable DPS scaling item, even in counter-heavy drafts.
  const damage=['crystal','genius','lightning'];
@@ -136,7 +144,8 @@ function analyze(options={}){
  const remaining=chosen.filter(id=>id!==second).sort((a,b)=>{
   if(deferWinter && a==='winter' && b!=='winter')return -1;
   if(deferWinter && b==='winter' && a!=='winter')return 1;
-  const late=id=>id==='crystal'?2:id==='divine'?3:1;
+  const late=id=>id==='crystal'?3:id==='divine'?2:1;
+
   return late(a)-late(b)||S[b]-S[a];
  });
  const order=[boots,second,'talisman',...remaining];
