@@ -2756,7 +2756,7 @@ function heroIntel(n){
 function analyze(options={}){
  const excludeWinter=!!options.excludeWinter;
 
- const en=selected.enemy,al=selected.ally;
+ const en=options.enemy??selected.enemy,al=options.ally??selected.ally;
  const enemyHeal=sum(en,'H'),enemySustain=sum(en,'S'),enemyVamp=sum(en,'L'),enemyShield=sum(en,'Q');
  const enemyTank=sum(en,'T'),enemyFront=sum(en,'F'),enemyDive=sum(en,'D'),enemyMob=sum(en,'M'),enemyBurst=sum(en,'B'),enemyCC=sum(en,'C'),enemyMagic=sum(en,'G'),enemyPoke=sum(en,'P'),enemyZone=sum(en,'Z');
  const allyCC=sum(al,'C'),allyPeel=sum(al,'R'),allyShield=sum(al,'Q'),allyFront=sum(al,'F'),allyHeal=sum(al,'H');
@@ -2831,10 +2831,10 @@ function analyze(options={}){
  if(I[remaining[0]].cd===0&&I[remaining[1]].cd===0){const k=remaining.findIndex(id=>I[id].cd>0);if(k>1)remaining.splice(1,0,...remaining.splice(k,1));}
 
  const order=[boots,...remaining];
- const diagnostics={healNeed,tankNeed,diveNeed,slowNeed,protection,enemyCC,enemyMagic,enemyPoke,hardHeal,hardDive,hardTank,hardSlow,synergy,ccNeed,pokeNeed};
+ const diagnostics={healNeed,shieldNeed,tankNeed,penetrationNeed,diveNeed,slowNeed,protection,enemyCC,enemyMagic,enemyPoke,hardHeal,hardDive,hardTank,hardSlow,synergy,ccNeed,pokeNeed,allyCC,enemyComboNotes:synergy.slice(0,enemyCombo)};
  const hardLock=en.some(n=>H.get(n).cc.includes('suppress')||H.get(n).mechanics.control.includes('area_lock'));
  const spell=ccNeed>=8&&!hardLock&&diveNeed<5?'Purify':'Flicker';
- return {...best,order,boots,second:order[1],spell,signals:diagnostics,scores:S};
+ return {...best,order,boots,second:order[1],spell,signals:diagnostics,scores:S,purchasePriority:Object.fromEntries(best.ids.map(id=>[id,early(id)]))};
 
 }
 function noteFor(id,a){
@@ -2867,6 +2867,64 @@ function tags(a){const s=a.signals,t=[];
  if(!t.length)t.push('Seimbang');
  return t.slice(0,3);
 }
+// Item Explanation: panel ringkas, hanya dibuka ketika kartu item dipilih.
+function bindItemExplanation(box,order,items,explain){
+ const grid=box.querySelector('.itemgrid');if(!grid)return;
+ const panel=document.createElement('section');panel.id='itemExplanation';panel.hidden=true;
+ panel.style.cssText='margin:8px 0;padding:10px;border:1px solid #526780;border-radius:9px;font-size:11px;line-height:1.55;overflow-wrap:anywhere';
+ panel.setAttribute('aria-live','polite');grid.after(panel);
+ const hint=document.createElement('div');hint.textContent='Ketuk item untuk melihat alasan pemilihan.';hint.style.cssText='font-size:10px;opacity:.78;margin:4px 0';grid.before(hint);
+ const cards=[...grid.querySelectorAll('.item')];let active=-1;
+ function close(){active=-1;panel.hidden=true;panel.replaceChildren();cards.forEach(c=>{c.setAttribute('aria-expanded','false');c.style.borderColor='';});}
+ cards.forEach((card,i)=>{
+  card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Alasan item '+items[order[i]].name);card.setAttribute('aria-controls',panel.id);card.setAttribute('aria-expanded','false');card.style.cursor='pointer';card.style.touchAction='manipulation';
+  function open(){if(active===i){close();return;}const rows=explain(order[i],i);close();active=i;card.setAttribute('aria-expanded','true');card.style.borderColor='#9cc4ff';panel.hidden=false;
+   const title=document.createElement('div');title.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';const b=document.createElement('b');b.textContent=(i+1)+'. '+items[order[i]].name;const x=document.createElement('button');x.type='button';x.textContent='Tutup';x.style.cssText='background:transparent;border:0;color:inherit;padding:5px;font-weight:700';x.onclick=()=>{close();card.focus();};title.append(b,x);panel.append(title);
+   for(const [label,value] of rows){if(!value)continue;const p=document.createElement('p');p.style.margin='7px 0 0';const h=document.createElement('b');h.textContent=label+': ';p.append(h,document.createTextNode(value));panel.append(p);}
+  }
+  card.addEventListener('click',open);card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}else if(e.key==='Escape')close();});
+ });
+}
+function itemNumber(v){return Number(v||0).toFixed(1);}
+function itemAttribution(id,a,enemy,ally,recalculate){
+ if(!Number.isFinite(a.scores?.[id]))return 'Tidak memakai skor kandidat; aturan tetap atau aturan khusus sepatu.';
+ const base=a.scores[id], changes=[];
+ for(const [team,names] of [['Musuh',enemy],['Teman',ally]])for(const n of names){
+  const en=team==='Musuh'?enemy.filter(x=>x!==n):enemy,al=team==='Teman'?ally.filter(x=>x!==n):ally;
+  const other=recalculate(en,al);const delta=base-other.scores[id];
+  if(Number.isFinite(delta)&&Math.abs(delta)>.001)changes.push({name:n,team,delta});
+ }
+ changes.sort((x,y)=>Math.abs(y.delta)-Math.abs(x.delta));
+ return changes.length?changes.map(x=>`${x.name} (${x.team.toLowerCase()}) ${x.delta>0?'+':'−'}${itemNumber(Math.abs(x.delta))}`).join(' · ')+' poin skor kandidat. Dihitung dengan mengeluarkan satu hero per simulasi; bukan persentase damage dan tidak dijumlahkan sebagai kontribusi independen.':'Tidak ada perubahan skor kandidat saat satu hero dikeluarkan. Skor bisa tetap, mencapai batas, atau pemilihan ditentukan aturan kombinasi/core.';
+}
+function itemPairText(id,order,items,pairs){
+ const lines=[];for(const [a,b,reason] of pairs){const other=id===a?b:id===b?a:null;if(other&&order.includes(other))lines.push(items[other].name+' — '+reason);}
+ return lines.length?lines.join(' | '):'Tidak ada pasangan khusus yang dicatat untuk item ini. Nilainya dinilai bersama kebutuhan build, bukan sebagai kombo wajib.';
+}
+function explainSelectedItem(id,i,a,en,al){
+ const s=a.signals,fmt=itemNumber, cd=I[id].cd||0;
+ const reasons={
+ shoes:'Aturan tetap: Magic Boots slot 1, bukan pilihan counter musuh. CDR awal mendukung spam dan zoning.',
+ talisman:'Skor dasar 39; kombinasi tanpa Talisman mendapat penalti risiko mana 8 poin. Memperluas cap CDR menjadi 45%.',
+ glow:`Heal ${fmt(s.healNeed)}, shield ${fmt(s.shieldNeed)}. Skor 8 + bonus heal/shield (maks. 75). ${s.hardHeal?'Ambang antiheal aktif: kombinasi tanpa item ini terkena penalti 55.':'Ambang antiheal belum aktif.'}`,
+ lantern:`Frontline/HP ${fmt(s.tankNeed)}. Skor 25 + bonus tank (maks. 55). ${s.hardTank?'Kombinasi tanpa Lantern terkena penalti 30.':'Ambang anti-tank belum aktif.'}`,
+ ice:`Kebutuhan slow ${fmt(s.slowNeed)} setelah memperhitungkan akses, escape, efektivitas slow dan CC teman. Skor 12 + bonus slow (maks. 45); dash tidak otomatis berhenti karena slow.`,
+ winter:`Dive ${fmt(s.diveNeed)}. Skor 5 + bonus dive (maks. 70). Mode Winter aktif pada build ini. Aktif item membantu menghadapi jendela burst; bukan kebal permanen.`,
+ wings:`Dive ${fmt(s.diveNeed)} dan poke ${fmt(s.pokeNeed)}. Skor 18 + bonus kedua ancaman (maks. 35). Shield tambahan membantu menjaga uptime dari backline.`,
+ divine:`Risiko kebutuhan penetrasi ${fmt(s.penetrationNeed)} dari ketebalan frontline. Skor 18 + bonus penetrasi (maks. 48); bukan membaca magic defense yang benar-benar dibeli.`,
+ crystal:'Skor tetap 49 untuk damage scaling. Pemilihan masih tunduk pada batas CDR, kebutuhan counter, dan syarat minimal salah satu item damage inti.',
+ genius:`Skor 34 + 10 bila tankNeed < 3 (saat ini ${fmt(s.tankNeed)}). Multi-hit mendukung pengurangan magic defense; bukan item anti-HP murni.`,
+ lightning:'Skor tetap 43. Menjaga damage tambahan sekaligus memenuhi kebutuhan CDR.',
+ clock:`Dive ${fmt(s.diveNeed)} setelah memperhitungkan akses, burst, interrupt, perlindungan teman dan combo musuh. Skor 21 + min(25, dive × 2). Item ini juga menyumbang CDR; bukan counter dash langsung.`,
+ fleeting:`CC teman ${fmt(s.allyCC)}. Skor 15 + bonus setup CC (maks. 12). Kombinasi Fleeting tanpa Lightning terkena penalti 8; reset ultimate tetap bergantung kill/assist.`,
+ sky:'Skor dasar −25; bukan prioritas utama, hanya dapat terpilih bila kombinasi memenuhi aturan.'
+ };
+ const pairs=[['clock','talisman','CDR dan pengelolaan resource; Clock menambah ketahanan'],['clock','lightning','CDR dari dua item sekaligus, damage Lightning melengkapi durability Clock'],['clock','wings','lapisan pertahanan tambahan untuk tetap hidup saat dive/poke'],['clock','lantern','CDR dan tekanan target tebal, dengan durability Clock'],['talisman','ice','spam skill mendukung slow dan zoning'],['talisman','lightning','CDR dan damage berulang'],['talisman','lantern','CDR dan hit skill berulang untuk target ber-HP tebal'],['genius','divine','pengurangan magic defense dan penetrasi, nilai gabungan tergantung defense target'],['glow','lantern','tekan pemulihan dan target ber-HP tebal'],['ice','lantern','slow dapat membantu target bertahan di area multi-hit'],['crystal','genius','magic power dan pengurangan magic defense'],['crystal','divine','magic power dan penetrasi'],['crystal','lightning','damage scaling dan tambahan damage/CDR'],['winter','wings','perlindungan aktif dan shield melayani jendela bahaya berbeda'],['fleeting','lightning','kombinasi ini memang menghindari penalti Fleeting tanpa Lightning di engine']];
+ const rawWithout=a.rawCD-cd,capWithout=id==='talisman'?40:a.cap;
+ const cdr=`Item +${cd}% CDR menurut database; build ${a.rawCD}% mentah, ${a.cd}% efektif (cap ${a.cap}%). ${cd&&Math.min(rawWithout,capWithout)<40?'Tanpa kontribusi item ini, CDR jatuh di bawah 40% jika tidak diganti.': 'Penghapusan item belum tentu menggagalkan CDR; kombinasi pengganti perlu dioptimasi ulang.'}`;
+ const combo=['clock','winter','wings'].includes(id)?s.enemyComboNotes.join(' ')||'Tidak ada combo musuh khusus yang masuk rumus dive.':null;
+ return [['Alasan dari engine',reasons[id]||noteFor(id,a)],['Pengaruh hero',itemAttribution(id,a,en,al,(enemy,ally)=>analyze({enemy,ally,excludeWinter:!a.order.includes('winter')}))],['Combo musuh yang dihitung',combo],['Kombinasi build',itemPairText(id,a.order,I,pairs)],['Cooldown',cdr],['Urutan beli',i===0?'Slot 1 wajib.':`Slot ${i+1}; prioritas urutan ${fmt(a.purchasePriority[id])}, berbeda dari skor kandidat ${fmt(a.scores[id])}. Urutan mengikuti bonus counter/mana, penalti item late, dan koreksi CDR awal bila diperlukan.`],['Batas analisis','Skor taktis engine, bukan statistik pertandingan. Pasangan item di atas adalah penjelasan fungsi; tidak semua pasangan memiliki bonus skor khusus.']];
+}
 let winterSelected=false;
 function build(shouldScroll=true){
  const standard=analyze();
@@ -2878,6 +2936,7 @@ function build(shouldScroll=true){
  const enemyProfiles=selected.enemy.map(n=>profileChip(n)).join('');
  const allyProfiles=selected.ally.map(n=>profileChip(n)).join('');
  byId('result').innerHTML=`<div class="row-title"><b>Build Item</b>${canWinter?`<button id="winterToggle" class="linkbtn" type="button">${winterSelected?'Tanpa Winter':'Dengan Winter'}</button>`:''}</div><div class="chips"><span class="pill">${a.cd}% CDR · item ${a.cdItem}%</span>${tags(a).map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</div><div class="itemgrid">${a.order.map((id,ix)=>`<div class="item"><span class="num">${ix+1}</span>${images(id)}<b>${esc(I[id].name)}</b><small>${esc(I[id].desc)}</small></div>`).join('')}</div><div class="micro"><b>Emblem:</b> Mage · Inspire / Bargain Hunter / Impure Rage &nbsp; <b>Spell:</b> ${a.spell}</div><details><summary>Kenapa pilih item ini?</summary>${explain}</details><details><summary>Analisis hero (${selected.enemy.length} musuh + ${selected.ally.length} teman)</summary><div class="tiny-head">Musuh</div>${enemyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tiny-head">Teman</div>${allyProfiles||'<div class="tip">Belum ada hero.</div>'}<div class="tip">Mekanik skill dicatat terpisah dari bobot perkiraan. Bukan pembacaan item musuh secara langsung; rank tier lama tidak otomatis menjadi win rate patch terbaru.</div></details><details><summary>Synergy & counter draft</summary>${a.signals.synergy.map(x=>`<div class="why">${esc(x)}</div>`).join('')||'Belum ada interaksi khusus.'}</details><div class="tip">${canWinter?(winterSelected?'Mode dengan Winter Crown. ':'Mode tanpa Winter Crown; opsi Winter tersedia karena ancaman dive tinggi. '):'Mode tanpa Winter Crown. '}Magic Boots wajib. Talisman opsional. ${a.order.includes('talisman')?'Mana sustain diprioritaskan.':'Tanpa Talisman: kelola mana dan manfaatkan Impure Rage.'} Prediksi berdasarkan draft Original Server 2.2.23, bukan kejadian atau item langsung dalam match.</div>`;
+ bindItemExplanation(byId('result'),a.order,I,(id,i)=>explainSelectedItem(id,i,a,[...selected.enemy],[...selected.ally]));
  if(canWinter)byId('winterToggle').onclick=()=>{winterSelected=!winterSelected;build(false);};
  if(shouldScroll)byId('result').scrollIntoView({behavior:'smooth',block:'start'});
  return a;
